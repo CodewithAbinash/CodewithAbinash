@@ -1,0 +1,152 @@
+{
+  "app_name": "Assam Co-op Connect",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A highly readable, trustworthy, and single-action-focused interface built for rural and semi-urban Assam users.",
+  "color": {
+    "surface": "#F9F9F6",
+    "onSurface": "#1A1A1A",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#1A1A1A",
+    "surfaceTertiary": "#EFEFE9",
+    "onSurfaceTertiary": "#4A4A4A",
+    "surfaceInverse": "#1A1A1A",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#1E3F20",
+    "brandPrimary": "#27532A",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#DCE5DD",
+    "onBrandSecondary": "#1E3F20",
+    "brandTertiary": "#EAF0EB",
+    "onBrandTertiary": "#1E3F20",
+    "success": "#287D3C",
+    "onSuccess": "#FFFFFF",
+    "warning": "#B95000",
+    "onWarning": "#FFFFFF",
+    "error": "#D32F2F",
+    "onError": "#FFFFFF",
+    "border": "#E0E0D8",
+    "borderStrong": "#BDBDB4",
+    "divider": "#EBEBE4"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous vertical breathing room. Minimal visual clutter. One primary action per screen.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": "false",
+    "do's": ["Use solid surfaceSecondary instead of glass to ensure maximum legibility and low-end device performance in rural networks."],
+    "dont's": ["Do not use blur or glassmorphism. Performance and absolute legibility take priority."]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "solid surfaceSecondary",
+      "android": "solid surfaceSecondary",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Login",
+      "purpose": "Secure gateway with role-based entry (Admin/Manager, Agent, Member).",
+      "states": {
+        "loading": "Centered spinner with 'Verifying credentials...'",
+        "empty": "N/A",
+        "error": "Readable red text 'Invalid credentials' + Retry button"
+      },
+      "layout": "Full-bleed background image of tea landscape with a gradient scrim (top to bottom, transparent to 90% surfaceInverse). A clean, white surfaceSecondary bottom sheet-like card holding the login form. Clear numeric inputs for Member ID / Agent ID. Large primary CTA button."
+    },
+    {
+      "name": "Dashboard / Home",
+      "purpose": "A clear overview of overall balance, recent financial activity, and quick access to deposits/loans.",
+      "states": {
+        "loading": "Skeleton loaders for balance card and transaction list.",
+        "empty": "Illustration of a passbook + 'No recent transactions. Start by adding a deposit.'",
+        "error": "Error message 'Unable to load dashboard' + Retry button."
+      },
+      "layout": "Top section: User greeting, role badge, and a prominent 'Total Balance / Total Collection' card inside a brandPrimary container. Quick-action grid below (Send, Collect, Passbook, New Loan). Bottom section: A simple list of recent transactions (merchant/member name, date, amount). Use clear visual hierarchy with high contrast text."
+    },
+    {
+      "name": "Members (List & Detail)",
+      "purpose": "Manage society members, KYC, and share capital tracking.",
+      "states": {
+        "loading": "Skeleton list rows.",
+        "empty": "Illustration of a group + 'No members found in this cluster.'",
+        "error": "'Failed to load members' + Retry."
+      },
+      "layout": "Search bar pinned to top. List items with Member Initials in a brandTertiary circle, Name, and Member ID. Detail view uses single column layout: Header with Name, followed by cards for 'Share Capital', 'Active Accounts', and 'Nominee Details'. Linear, clean layout without nested tabs."
+    },
+    {
+      "name": "Loans & Deposits",
+      "purpose": "Track Pigmy/Daily deposits, FDs, and manage loan workflows (EMI, interest).",
+      "states": {
+        "loading": "Spinner centered.",
+        "empty": "Safe illustration + 'No active loans or deposits.'",
+        "error": "'Could not fetch financial records' + Retry."
+      },
+      "layout": "Segmented control at the top (Loans | Deposits). Loans view: List of active loans with progress rings showing repayment vs. total. Plain language text for interest ('₹400 total interest'). Deposits view: List of recurring/fixed deposits. Floating Action Button (FAB) for 'New Application'."
+    },
+    {
+      "name": "Collection Agent Field View",
+      "purpose": "Optimized rapid entry for agents collecting daily deposits in the field.",
+      "states": {
+        "loading": "Spinner.",
+        "empty": "'No collections assigned for today.'",
+        "error": "'Network error. Collections will be saved offline.' + Retry."
+      },
+      "layout": "Extremely utilitarian list. Search/Scan Member ID. Each row has an input field inline or taps into a quick-numpad modal for entering the collected amount. Emphasize offline-first wording. Big sticky 'Submit Daily Ledger' button at the bottom."
+    }
+  ],
+  "images": {
+    "login_hero_bg": {
+      "url": "https://images.unsplash.com/photo-1758390286286-9b3b690989e7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwyfHxBc3NhbSUyMGxhbmRzY2FwZSUyMHRlYSUyMGdhcmRlbiUyMG5hdHVyZXxlbnwwfHx8fDE3ODIwNTc2NDd8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Assam tea garden landscape path"
+    },
+    "empty_finance_safe": {
+      "url": "https://images.pexels.com/photos/210705/pexels-photo-210705.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Secure cash box with coins representing banking security"
+    },
+    "empty_tea_plantation": {
+      "url": "https://images.pexels.com/photos/32849317/pexels-photo-32849317.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Aerial view of a lush tea plantation"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly avoid any shade of blue, purple, or indigo. Use the provided Moss Green (brandPrimary) and Rust/Ochre (warning) palette. The app should feel earthy, grounded, and representative of Assam.",
+    "Prioritize simplicity & single-task focus. For rural users, digital finance causes high cognitive load. Break complex forms into linear steps. Use plain language (e.g., 'Total Interest' instead of complex APR charts).",
+    "Ensure high contrast and large text. Target WCAG AA+. Do not rely on icons alone; ALWAYS pair icons with short, clear text labels.",
+    "Do NOT use glassmorphism or heavy blurs. This app must perform well on low-end devices and 2G/3G networks in rural Assam. Use solid `surfaceSecondary` with `shadow_tier: 1` for elevation.",
+    "Design for offline or flaky networks. Indicate when data is pending sync, especially in the 'Collection Agent Field View'.",
+    "Forms must use labels above inputs, never floating labels. Single column layouts only. Ensure primary CTAs are sticky at the bottom."
+  ]
+}
