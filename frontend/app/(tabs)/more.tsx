@@ -6,12 +6,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/lib/auth";
 import { colors, radius, spacing, typography, shadow } from "@/src/lib/theme";
 
-const MENU: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; desc: string; href: string }[] = [
+const MENU: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; desc: string; href: string; roles?: string[] }[] = [
   { key: "deposits", icon: "wallet", label: "Savings & Deposits", desc: "RD, FD, Daily/Pigmy accounts", href: "/deposits" },
   { key: "collections", icon: "bicycle", label: "Field Collection", desc: "Agent daily ledger", href: "/collections" },
   { key: "notices", icon: "megaphone", label: "Notices & AGM", desc: "Circulars and meeting notices", href: "/notices" },
   { key: "rules", icon: "book", label: "Assam Co-op Rules", desc: "Compliance reference (Act 2007)", href: "/rules" },
-  { key: "profile", icon: "person-circle", label: "Profile & Settings", desc: "Account, sign out", href: "/profile" },
+  { key: "settings", icon: "settings", label: "Society Settings", desc: "Society profile & rates", href: "/settings" },
+  { key: "profile", icon: "person-circle", label: "Profile & Sign Out", desc: "Account, sign out", href: "/profile" },
 ];
 
 export default function More() {

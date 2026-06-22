@@ -65,6 +65,16 @@ export const api = {
     request(`/loans/${id}/approve`, { method: "POST" }),
   rejectLoan: (id: string) =>
     request(`/loans/${id}/reject`, { method: "POST" }),
+  loanSchedule: (id: string) => request(`/loans/${id}/schedule`),
+  payEmi: (id: string) => request(`/loans/${id}/pay-emi`, { method: "POST" }),
+
+  // passbook (member self-view)
+  passbook: () => request("/passbook"),
+
+  // settings
+  getSettings: () => request("/settings"),
+  updateSettings: (body: any) =>
+    request("/settings", { method: "PUT", body }),
 
   // transactions
   listTxns: () => request<any[]>("/transactions"),

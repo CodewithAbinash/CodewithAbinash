@@ -90,17 +90,27 @@ export default function Dashboard() {
         </View>
 
         <View style={styles.balanceCard} testID="balance-card">
-          <Text style={styles.balanceLabel}>Total society deposits</Text>
-          <Text style={styles.balanceValue}>{fmt(data?.total_deposits ?? 0)}</Text>
+          <Text style={styles.balanceLabel}>
+            {data?.is_member ? "Your savings balance" : "Total society deposits"}
+          </Text>
+          <Text style={styles.balanceValue}>
+            {fmt(data?.is_member ? (data?.total_savings ?? 0) : (data?.total_deposits ?? 0))}
+          </Text>
           <View style={styles.balanceRow}>
             <View style={styles.balanceCol}>
-              <Text style={styles.miniLabel}>Loan outstanding</Text>
+              <Text style={styles.miniLabel}>
+                {data?.is_member ? "Your loan outstanding" : "Loan outstanding"}
+              </Text>
               <Text style={styles.miniValue}>{fmt(data?.loan_outstanding ?? 0)}</Text>
             </View>
             <View style={styles.divider} />
             <View style={styles.balanceCol}>
-              <Text style={styles.miniLabel}>Active members</Text>
-              <Text style={styles.miniValue}>{data?.members ?? 0}</Text>
+              <Text style={styles.miniLabel}>
+                {data?.is_member ? "Member no." : "Active members"}
+              </Text>
+              <Text style={styles.miniValue}>
+                {data?.is_member ? (data?.member?.member_no ?? "—") : (data?.members ?? 0)}
+              </Text>
             </View>
           </View>
         </View>
@@ -129,6 +139,12 @@ export default function Dashboard() {
           <View style={styles.stat}>
             <Text style={styles.statN}>{data?.pending_loans ?? 0}</Text>
             <Text style={styles.statL}>Pending loans</Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={[styles.statN, (data?.npa_loans ?? 0) > 0 && { color: colors.error }]}>
+              {data?.npa_loans ?? 0}
+            </Text>
+            <Text style={styles.statL}>NPA loans</Text>
           </View>
           <View style={styles.stat}>
             <Text style={styles.statN}>{data?.accounts ?? 0}</Text>

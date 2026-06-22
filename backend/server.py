@@ -132,6 +132,9 @@ class Member(MemberIn):
     member_no: str  # e.g. ACC-2026-0001
     joined_on: str
     status: Literal["Active", "Suspended"] = "Active"
+    user_id: Optional[str] = None
+    login_email: Optional[str] = None
+    default_password: Optional[str] = None
 
 
 class AccountIn(BaseModel):
@@ -215,6 +218,47 @@ def gen_no(prefix: str, count: int) -> str:
     return f"{prefix}-{datetime.now().year}-{count + 1:04d}"
 
 
+def gen_emi_schedule(loan_id: str, amount: float, rate_pa: float, tenure: int, start: datetime) -> list:
+    """Reducing-balance EMI schedule."""
+    r = (rate_pa / 12.0) / 100.0
+    emi_val, _, _ = calc_emi(amount, rate_pa, tenure)
+    balance = amount
+    rows = []
+    for i in range(1, tenure + 1):
+        interest = round(balance * r, 2)
+        principal = round(emi_val - interest, 2)
+        balance = round(max(balance - principal, 0), 2)
+        due = start + timedelta(days=30 * i)
+        rows.append({
+            "id": str(uuid.uuid4()),
+            "loan_id": loan_id,
+            "installment_no": i,
+            "due_date": due.isoformat(),
+            "emi": emi_val,
+            "principal_component": principal,
+            "interest_component": interest,
+            "balance_after": balance,
+            "paid_amount": 0.0,
+            "paid_on": None,
+            "status": "Due",  # Due / Paid / Overdue
+        })
+    return rows
+
+
+def npa_classify(schedule: list) -> bool:
+    """Loan is NPA if any due installment is >90 days overdue."""
+    today = datetime.now(timezone.utc)
+    for s in schedule:
+        if s["status"] != "Paid":
+            try:
+                due = datetime.fromisoformat(s["due_date"])
+                if (today - due).days > 90:
+                    return True
+            except Exception:
+                pass
+    return False
+
+
 # ---------- Auth ----------
 @api.post("/auth/register", response_model=UserOut)
 async def register(data: RegisterIn):
@@ -260,6 +304,27 @@ async def me(user: dict = Depends(current_user)):
 # ---------- Dashboard ----------
 @api.get("/dashboard")
 async def dashboard(user: dict = Depends(current_user)):
+    # Member sees a personal mini-dashboard
+    if user["role"] == "Member":
+        member = await db.members.find_one({"user_id": user["id"]}, {"_id": 0})
+        if not member:
+            return {"is_member": True, "member": None, "accounts": [], "loans": [], "recent_transactions": []}
+        accounts = await db.accounts.find({"member_id": member["id"]}, {"_id": 0}).to_list(50)
+        loans = await db.loans.find({"member_id": member["id"]}, {"_id": 0, "schedule": 0}).to_list(50)
+        txns = await db.transactions.find({"member_id": member["id"]}, {"_id": 0}).sort("created_at", -1).limit(10).to_list(10)
+        total_savings = sum(a.get("balance", 0) for a in accounts)
+        active_loans_amt = sum(ln["amount"] - ln.get("paid", 0) for ln in loans if ln["status"] == "Approved")
+        return {
+            "is_member": True,
+            "member": member,
+            "total_savings": round(total_savings, 2),
+            "loan_outstanding": round(active_loans_amt, 2),
+            "accounts": accounts,
+            "loans": loans,
+            "recent_transactions": txns,
+        }
+
+    # Staff dashboard
     members = await db.members.count_documents({})
     active_loans = await db.loans.count_documents({"status": "Approved"})
     pending_loans = await db.loans.count_documents({"status": "Pending"})
@@ -281,23 +346,50 @@ async def dashboard(user: dict = Depends(current_user)):
         (loan_agg[0]["principal"] - loan_agg[0]["paid"]) if loan_agg else 0
     )
 
+    # NPA count
+    npa = 0
+    approved = await db.loans.find({"status": "Approved"}, {"schedule": 1}).to_list(1000)
+    for ln in approved:
+        if npa_classify(ln.get("schedule", [])):
+            npa += 1
+
     recent = await db.transactions.find({}, {"_id": 0}).sort("created_at", -1).limit(8).to_list(8)
 
     return {
+        "is_member": False,
         "members": members,
         "active_loans": active_loans,
         "pending_loans": pending_loans,
         "accounts": accounts,
         "total_deposits": round(total_deposits, 2),
         "loan_outstanding": round(loan_outstanding, 2),
+        "npa_loans": npa,
         "recent_transactions": recent,
     }
+
+
+@api.get("/passbook")
+async def passbook(user: dict = Depends(current_user)):
+    """Own passbook for a Member; staff can pass ?member_id=..."""
+    if user["role"] == "Member":
+        member = await db.members.find_one({"user_id": user["id"]}, {"_id": 0})
+    else:
+        raise HTTPException(403, "Use /members/{id} for staff view")
+    if not member:
+        raise HTTPException(404, "Member record not found")
+    accounts = await db.accounts.find({"member_id": member["id"]}, {"_id": 0}).to_list(50)
+    loans = await db.loans.find({"member_id": member["id"]}, {"_id": 0}).to_list(50)
+    txns = await db.transactions.find({"member_id": member["id"]}, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
+    return {"member": member, "accounts": accounts, "loans": loans, "transactions": txns}
 
 
 # ---------- Members ----------
 @api.get("/members", response_model=List[Member])
 async def list_members(user: dict = Depends(current_user)):
-    rows = await db.members.find({}, {"_id": 0}).sort("joined_on", -1).to_list(1000)
+    q: dict = {}
+    if user["role"] == "Member":
+        q = {"user_id": user["id"]}
+    rows = await db.members.find(q, {"_id": 0}).sort("joined_on", -1).to_list(1000)
     return rows
 
 
@@ -305,12 +397,33 @@ async def list_members(user: dict = Depends(current_user)):
 async def add_member(data: MemberIn,
                      user: dict = Depends(require_roles("Admin", "Manager"))):
     count = await db.members.count_documents({})
+    # auto-create a Member user account
+    login_email = f"{data.phone.replace('+', '').replace('-', '').replace(' ', '')}@member.coop"
+    default_pw = "Member@123"
+    existing = await db.users.find_one({"email": login_email})
+    if existing:
+        member_user_id = existing["id"]
+    else:
+        member_user_id = str(uuid.uuid4())
+        await db.users.insert_one({
+            "id": member_user_id,
+            "name": data.name,
+            "email": login_email,
+            "phone": data.phone,
+            "role": "Member",
+            "password": hash_pw(default_pw),
+            "created_at": now_iso(),
+        })
+
     m = {
         **data.model_dump(),
         "id": str(uuid.uuid4()),
         "member_no": gen_no("ACC", count),
         "joined_on": now_iso(),
         "status": "Active",
+        "user_id": member_user_id,
+        "login_email": login_email,
+        "default_password": default_pw,  # plaintext stored ONCE for admin handoff
     }
     await db.members.insert_one(m)
     # Share capital is logged as a transaction
@@ -373,9 +486,14 @@ async def add_account(data: AccountIn,
 
 
 # ---------- Loans ----------
-@api.get("/loans", response_model=List[Loan])
+@api.get("/loans")
 async def list_loans(user: dict = Depends(current_user)):
-    return await db.loans.find({}, {"_id": 0}).sort("applied_on", -1).to_list(1000)
+    q: dict = {}
+    if user["role"] == "Member":
+        m = await db.members.find_one({"user_id": user["id"]}, {"id": 1})
+        q = {"member_id": m["id"]} if m else {"member_id": "__none__"}
+    rows = await db.loans.find(q, {"_id": 0, "schedule": 0}).sort("applied_on", -1).to_list(1000)
+    return rows
 
 
 @api.post("/loans", response_model=Loan)
@@ -403,13 +521,23 @@ async def apply_loan(data: LoanIn, user: dict = Depends(current_user)):
 @api.post("/loans/{loan_id}/approve")
 async def approve_loan(loan_id: str,
                        user: dict = Depends(require_roles("Admin", "Manager"))):
-    res = await db.loans.update_one(
-        {"id": loan_id, "status": "Pending"},
-        {"$set": {"status": "Approved", "approved_on": now_iso()}},
-    )
-    if res.modified_count == 0:
+    loan = await db.loans.find_one({"id": loan_id, "status": "Pending"})
+    if not loan:
         raise HTTPException(400, "Loan cannot be approved")
-    return {"ok": True}
+    schedule = gen_emi_schedule(
+        loan_id, loan["amount"], loan["interest_rate"],
+        loan["tenure_months"], datetime.now(timezone.utc),
+    )
+    await db.loans.update_one(
+        {"id": loan_id},
+        {"$set": {
+            "status": "Approved",
+            "approved_on": now_iso(),
+            "approved_by": user["name"],
+            "schedule": schedule,
+        }},
+    )
+    return {"ok": True, "schedule_count": len(schedule)}
 
 
 @api.post("/loans/{loan_id}/reject")
@@ -417,11 +545,85 @@ async def reject_loan(loan_id: str,
                       user: dict = Depends(require_roles("Admin", "Manager"))):
     res = await db.loans.update_one(
         {"id": loan_id, "status": "Pending"},
-        {"$set": {"status": "Rejected", "approved_on": now_iso()}},
+        {"$set": {"status": "Rejected", "approved_on": now_iso(),
+                  "approved_by": user["name"]}},
     )
     if res.modified_count == 0:
         raise HTTPException(400, "Loan cannot be rejected")
     return {"ok": True}
+
+
+@api.get("/loans/{loan_id}/schedule")
+async def loan_schedule(loan_id: str, user: dict = Depends(current_user)):
+    loan = await db.loans.find_one({"id": loan_id}, {"_id": 0})
+    if not loan:
+        raise HTTPException(404, "Loan not found")
+    # Member can see only own loan schedule
+    if user["role"] == "Member":
+        m = await db.members.find_one({"user_id": user["id"]}, {"id": 1})
+        if not m or m["id"] != loan["member_id"]:
+            raise HTTPException(403, "Not allowed")
+    schedule = loan.get("schedule", [])
+    # Mark overdue
+    today = datetime.now(timezone.utc)
+    for s in schedule:
+        if s["status"] != "Paid":
+            try:
+                due = datetime.fromisoformat(s["due_date"])
+                s["status"] = "Overdue" if today > due else "Due"
+            except Exception:
+                pass
+    return {
+        "loan_no": loan["loan_no"],
+        "emi": loan["emi"],
+        "paid": loan.get("paid", 0),
+        "total_payable": loan["total_payable"],
+        "npa": npa_classify(schedule),
+        "schedule": schedule,
+    }
+
+
+@api.post("/loans/{loan_id}/pay-emi")
+async def pay_emi(loan_id: str, user: dict = Depends(current_user)):
+    """Pay the next due EMI installment (cash, by current user)."""
+    loan = await db.loans.find_one({"id": loan_id})
+    if not loan or loan.get("status") != "Approved":
+        raise HTTPException(400, "Loan not active")
+    schedule = loan.get("schedule", [])
+    nxt = next((s for s in schedule if s["status"] != "Paid"), None)
+    if not nxt:
+        raise HTTPException(400, "All EMIs already paid")
+
+    nxt["paid_amount"] = nxt["emi"]
+    nxt["paid_on"] = now_iso()
+    nxt["status"] = "Paid"
+
+    # ledger entry
+    count = await db.transactions.count_documents({})
+    txn = {
+        "id": str(uuid.uuid4()),
+        "receipt_no": gen_no("RCP", count),
+        "member_id": loan["member_id"],
+        "account_id": None,
+        "loan_id": loan_id,
+        "type": "EMI",
+        "amount": nxt["emi"],
+        "note": f"EMI {nxt['installment_no']}/{loan['tenure_months']} for {loan['loan_no']}",
+        "mode": "Cash",
+        "by_user": user["id"],
+        "by_name": user["name"],
+        "created_at": now_iso(),
+    }
+    await db.transactions.insert_one(txn)
+    await db.loans.update_one(
+        {"id": loan_id},
+        {"$set": {"schedule": schedule},
+         "$inc": {"paid": nxt["emi"]}},
+    )
+    # close loan if fully paid
+    if all(s["status"] == "Paid" for s in schedule):
+        await db.loans.update_one({"id": loan_id}, {"$set": {"status": "Closed"}})
+    return {"ok": True, "receipt_no": txn["receipt_no"], "installment": nxt}
 
 
 # ---------- Transactions / Collections ----------
@@ -501,6 +703,41 @@ async def assam_rules():
         },
         "disclaimer": "Summary for app guidance only. Refer official gazette.",
     }
+
+
+# ---------- Society Settings ----------
+class SettingsIn(BaseModel):
+    society_name: str = "Assam Co-op Connect"
+    registration_no: Optional[str] = None
+    address: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
+    default_savings_rate: float = 7.0
+    default_loan_rate: float = 12.0
+    default_dividend_pct: float = 10.0
+    logo_base64: Optional[str] = None
+
+
+@api.get("/settings")
+async def get_settings(user: dict = Depends(current_user)):
+    s = await db.settings.find_one({"id": "society"}, {"_id": 0})
+    if not s:
+        s = {"id": "society", **SettingsIn().model_dump(), "updated_at": now_iso()}
+        await db.settings.insert_one(s)
+        s = {k: v for k, v in s.items() if k != "_id"}
+    return s
+
+
+@api.put("/settings")
+async def update_settings(data: SettingsIn,
+                          user: dict = Depends(require_roles("Admin"))):
+    payload = {**data.model_dump(), "updated_at": now_iso()}
+    await db.settings.update_one(
+        {"id": "society"}, {"$set": payload, "$setOnInsert": {"id": "society"}},
+        upsert=True,
+    )
+    s = await db.settings.find_one({"id": "society"}, {"_id": 0})
+    return s
 
 
 # ---------- Seed ----------

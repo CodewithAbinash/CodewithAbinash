@@ -1,12 +1,13 @@
 import { useState } from "react";
 import {
   View, Text, TextInput, StyleSheet, ScrollView, Pressable,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import ScreenHeader from "@/src/components/ScreenHeader";
 import { api } from "@/src/lib/api";
-import { colors, radius, spacing, typography } from "@/src/lib/theme";
+import { colors, radius, spacing, typography, shadow } from "@/src/lib/theme";
 
 export default function MemberNew() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function MemberNew() {
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [created, setCreated] = useState<any>(null);
 
   function up(k: string, v: string) { setForm((f) => ({ ...f, [k]: v })); }
 
@@ -24,8 +26,8 @@ export default function MemberNew() {
     if (!form.name || !form.phone || !form.address) { setErr("Name, phone & address are required."); return; }
     setErr(null); setBusy(true);
     try {
-      await api.addMember({ ...form, share_capital: parseFloat(form.share_capital) || 100 });
-      router.back();
+      const res = await api.addMember({ ...form, share_capital: parseFloat(form.share_capital) || 100 });
+      setCreated(res);
     } catch (e: any) { setErr(e?.message ?? "Failed"); } finally { setBusy(false); }
   }
 
@@ -69,6 +71,27 @@ export default function MemberNew() {
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save Member</Text>}
         </Pressable>
       </View>
+
+      <Modal visible={!!created} transparent animationType="fade" onRequestClose={() => { setCreated(null); router.back(); }}>
+        <View style={styles.modalBg}>
+          <View style={styles.modalCard} testID="member-created-modal">
+            <Ionicons name="checkmark-circle" size={48} color={colors.success} />
+            <Text style={styles.mTitle}>Member created</Text>
+            <Text style={styles.mNo}>{created?.member_no}</Text>
+            <View style={styles.credBox}>
+              <Text style={styles.credLbl}>Member login email</Text>
+              <Text style={styles.credVal} selectable>{created?.login_email}</Text>
+              <Text style={[styles.credLbl, { marginTop: spacing.sm }]}>Default password</Text>
+              <Text style={styles.credVal} selectable>{created?.default_password}</Text>
+              <Text style={styles.hint}>Share these with the member. They can change the password after first login.</Text>
+            </View>
+            <Pressable testID="member-created-done" style={styles.cta}
+              onPress={() => { setCreated(null); router.back(); }}>
+              <Text style={styles.ctaText}>Done</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -82,6 +105,14 @@ const styles = StyleSheet.create({
   },
   err: { color: colors.error, marginTop: spacing.sm, fontSize: typography.base },
   footer: { padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surfaceSecondary },
-  cta: { backgroundColor: colors.brandPrimary, paddingVertical: spacing.lg, borderRadius: radius.md, alignItems: "center" },
+  cta: { backgroundColor: colors.brandPrimary, paddingVertical: spacing.lg, borderRadius: radius.md, alignItems: "center", marginTop: spacing.md },
   ctaText: { color: colors.onBrandPrimary, fontSize: typography.lg, fontWeight: "700" },
+  modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: spacing.lg },
+  modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.xl, borderRadius: radius.lg, alignItems: "center", width: "100%", maxWidth: 400, ...shadow.card },
+  mTitle: { fontSize: typography.xl, fontWeight: "700", color: colors.onSurface, marginTop: spacing.md },
+  mNo: { color: colors.brandPrimary, fontWeight: "700", marginTop: 4 },
+  credBox: { width: "100%", backgroundColor: colors.brandTertiary, padding: spacing.md, borderRadius: radius.md, marginTop: spacing.lg },
+  credLbl: { color: colors.brandPrimary, fontSize: typography.sm, fontWeight: "600" },
+  credVal: { color: colors.onSurface, fontSize: typography.lg, fontWeight: "700", marginTop: 2 },
+  hint: { color: colors.brandPrimary, fontSize: typography.sm, marginTop: spacing.sm, lineHeight: 18 },
 });

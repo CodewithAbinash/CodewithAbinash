@@ -15,7 +15,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/lib/api";
 import { useAuth } from "@/src/lib/auth";
 import { colors, radius, spacing, typography, shadow } from "@/src/lib/theme";
-
 const FILTERS = ["All", "Pending", "Approved", "Rejected", "Closed"] as const;
 
 function fmt(n: number) {
@@ -101,7 +100,11 @@ export default function Loans() {
               ? Math.min(item.paid / item.total_payable, 1)
               : 0;
             return (
-              <View style={styles.card} testID={`loan-${item.id}`}>
+              <Pressable
+                style={styles.card}
+                testID={`loan-${item.id}`}
+                onPress={() => router.push(`/loan/${item.id}` as any)}
+              >
                 <View style={styles.cardTop}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.loanNo}>{item.loan_no}</Text>
@@ -177,7 +180,7 @@ export default function Loans() {
                     </Pressable>
                   </View>
                 )}
-              </View>
+              </Pressable>
             );
           }}
         />

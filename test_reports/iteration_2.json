@@ -1,0 +1,47 @@
+{
+  "summary": "Backend-only re-test for new Assam Co-op features. Re-ran the existing pytest suite at /app/backend/tests/test_coop_api.py (25/25 PASS) and added a new pytest file /app/backend/tests/test_new_features.py (19/19 PASS) covering: (a) POST /api/members auto-creates a Member user account — response carries login_email='<phone>@member.coop' and default_password='Member@123', and the new member can log in successfully; (b) Member-scoped views — Member dashboard returns is_member:true plus member, total_savings, loan_outstanding, accounts[], loans[], recent_transactions[]; GET /api/members returns only own record; GET /api/loans returns only own loans; GET /api/passbook returns own data; staff GET /api/passbook returns 403; (c) Loan approval generates EMI schedule (schedule_count==tenure_months); GET /api/loans/{id}/schedule returns loan_no, emi, paid, total_payable, npa, schedule[] with installment_no, due_date, principal_component, interest_component, emi, balance_after, status (Due/Overdue/Paid) and last balance_after≈0; member can view own schedule; (d) POST /api/loans/{id}/pay-emi marks the next Due installment Paid, increments loan.paid by emi, creates a Txn with type=EMI and receipt_no starting with 'RCP-'; paying all installments flips loan.status to 'Closed' and subsequent pay-emi returns 400; (e) NPA: dashboard exposes npa_loans:int (0 for fresh schedules), and the npa_classify helper correctly returns True for any non-paid item >90 days overdue, False for <90 days, and ignores Paid items; (f) Settings: GET /api/settings is accessible to Admin/Manager/Agent/Member; PUT /api/settings persists changes for Admin (verified by re-GET) and returns 403 for Manager/Agent/Member. Total: 44/44 passed in ~10s.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "passlib bcrypt", "issue": "Passlib still logs 'trapped error reading bcrypt version' on startup (AttributeError: module 'bcrypt' has no attribute '__about__'). Harmless but noisy — pin bcrypt<4 or upgrade passlib. Carried over from iteration_1."},
+      {"endpoint": "FastAPI lifecycle", "issue": "@app.on_event('startup'/'shutdown') is deprecated in newer FastAPI — migrate to lifespan handlers (DeprecationWarning emitted during tests)."},
+      {"endpoint": "POST /api/members", "issue": "default_password ('Member@123') is stored in plaintext on the member document for admin handoff. Acceptable per product intent but consider clearing it after first member login to avoid long-term plaintext retention."},
+      {"endpoint": "POST /api/members re-create with same phone", "issue": "If a member with the same phone is re-added, the code reuses the existing user_id (good) but still records default_password='Member@123' on the new member doc even if that user has since changed their password. Cosmetic but could mislead admins."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_coop_api.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Pin bcrypt<4 in backend/requirements.txt to silence passlib warning.",
+    "(Optional) Migrate FastAPI startup/shutdown handlers to the new lifespan API to stop DeprecationWarning.",
+    "(Optional) Consider clearing/redacting members.default_password after the member's first successful login, since it currently lives indefinitely in plaintext on the member doc.",
+    "(Optional) Add a /api/members/{id}/regenerate-password endpoint (Admin) so secretaries can reset the auto-generated credential without manually editing Mongo."
+  ],
+  "critical_code_review_comments": [
+    "Good: New endpoints all role-gated via require_roles (settings PUT admin-only verified, passbook staff 403 verified).",
+    "Good: EMI schedule helper uses standard reducing-balance amortisation and final balance lands ~0 within rounding.",
+    "Good: Pay-emi correctly increments loan.paid via $inc, writes a Txn ledger entry, and flips the loan to Closed once every installment is Paid.",
+    "Good: NPA classifier ignores 'Paid' rows and uses 90-day cutoff exactly as specified.",
+    "Good: Member-scoped /members and /loans filter by user_id; passbook returns 403 to non-Members instead of leaking data.",
+    "Minor: backend/server.py is now ~812 lines — past the 700-line soft threshold. Consider splitting into routers (auth, members, loans, settings).",
+    "Minor: default_password persisted in plaintext on member doc (see action items)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py (new — covers member portal, EMI schedule, pay-emi, NPA, settings)"
+  ],
+  "success_rate": {"backend": "100% (44/44)", "frontend": "not tested this round (backend-only)"},
+  "seed_data_creation": "Added via tests: 1 new TEST_PortalMember (with auto-created Member user '<phone>@member.coop'), 1 approved 6-month loan with full schedule (1 EMI paid), 1 fully-paid/Closed 2-month loan, multiple EMI/Deposit Txns, plus settings doc updated to 'TEST Co-op Society'. All prefixed TEST_/RCS/ASM/TEST/ for cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Public URL is in EXPO_PUBLIC_BACKEND_URL (frontend/.env). Tests live under /app/backend/tests/{test_coop_api.py,test_new_features.py}. The new feature suite uses a unique phone per run (time-based) so it is re-runnable. PUT /api/settings during this run set society_name='TEST Co-op Society' and registration_no='RCS/ASM/TEST/2026' — main agent should revert if production-like defaults are required for screenshots. Member auto-login pattern: email='<digits-of-phone>@member.coop', pw='Member@123'.",
+  "rca_of_issue": "No bugs found — all 7 review checklist items verified end-to-end."
+}
